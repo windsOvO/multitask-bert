@@ -19,7 +19,7 @@ def test_csv_to_json():
                         json_dict[tmp_list[0]]['s2'] = tmp_list[2]
                 fw.write(json.dumps(json_dict))
                 
-def inference_warpper(tokenizer_model='bert-base-chinese'):
+def inference_warpper(tokenizer_model, device):
     ocnli_test = dict()
     with open('./datasets/OCNLI/test.json') as f:
         for line in f:
@@ -43,14 +43,20 @@ def inference_warpper(tokenizer_model='bert-base-chinese'):
         for line in f:
             label_dict = json.loads(line)
             break
+
+    tokenizer = BertTokenizer.from_pretrained(tokenizer_model)   
+    # gpu模型转cpu
+    if device == 'cpu':
+        # model = torch.load('./models/saved_best.pt', map_location='cpu')
+        model = torch.load('./models/saved_best.pt')
+    else:
+         model = torch.load('./models/saved_best.pt')
+
+    inference('./submission/5928/ocnli_predict.json', ocnli_test, model, tokenizer, label_dict['OCNLI'], 'ocnli', device, 64, True)
+    inference('./submission/5928/ocemotion_predict.json', ocemotion_test, model, tokenizer, label_dict['OCEMOTION'], 'ocemotion', device, 64, True)
+    inference('./submission/5928/tnews_predict.json', tnews_test, model, tokenizer, label_dict['TNEWS'], 'tnews', device, 64, True)
         
-    model = torch.load('./saved_best.pt')
-    tokenizer = BertTokenizer.from_pretrained(tokenizer_model)
-    inference('./submission/5928/ocnli_predict.json', ocnli_test, model, tokenizer, label_dict['OCNLI'], 'ocnli', 'cpu', 64, True)
-    inference('./submission/5928/ocemotion_predict.json', ocemotion_test, model, tokenizer, label_dict['OCEMOTION'], 'ocemotion', 'cpu', 64, True)
-    inference('./submission/5928/tnews_predict.json', tnews_test, model, tokenizer, label_dict['TNEWS'], 'tnews', 'cpu', 64, True)
-        
-def inference(path, data_dict, model, tokenizer, idx2label, task_type, device='cuda:3', batchSize=64, max_len=512, print_result=True):
+def inference(path, data_dict, model, tokenizer, idx2label, task_type, device='cuda', batchSize=64, max_len=512, print_result=True):
     if task_type != 'ocnli' and task_type != 'ocemotion' and task_type != 'tnews':
         print('task_type is incorrect!')
         return
@@ -89,6 +95,8 @@ def inference(path, data_dict, model, tokenizer, idx2label, task_type, device='c
                 else:
                     pred = torch.argmax(tnews_out, axis=1)
                 pred_final = [idx2label[e] for e in np.array(pred.cpu()).tolist()]
+
+                torch.cuda.empty_cache()
                 for i, idx in enumerate(cur_ids_list):
                     if print_result:
                         print_str = '[ ' + task_type + ' : ' + 'sentence one: ' + data_dict[idx]['s1']
@@ -104,9 +112,9 @@ def inference(path, data_dict, model, tokenizer, idx2label, task_type, device='c
                         f.write('\n')
                         
 if __name__ == '__main__':
-    test_csv_to_json()
-    print('--------------------- start predicting ---------------------')
-    inference_warpper(tokenizer_model='./pretrain_model')
+    # test_csv_to_json()
+    print('------------------- start predicting -------------------')
+    inference_warpper(tokenizer_model='./pretrain_model', device='cpu')
     
     
     

@@ -59,6 +59,10 @@ class Data_generator():
         ocemotion_len = len(self.ocemotion_ids)
         tnews_len = len(self.tnews_ids)
         total_len = ocnli_len + ocemotion_len + tnews_len
+        
+        ocnli_cur = []
+        ocemotion_cur = []
+        tnews_cur = []
         # 分batch
         if total_len == 0:
             return None
@@ -109,8 +113,10 @@ class Data_generator():
             token_type_ids.append(flower['token_type_ids'])
             attention_mask.append(flower['attention_mask'])
             tnews_gold = torch.tensor([self.tnews_data['label'][idx] for idx in tnews_cur]).to(self.device)
+
         st = 0
         ed = len(ocnli_cur)
+
         ocnli_tensor = torch.tensor([i for i in range(st, ed)]).to(self.device)
         st += len(ocnli_cur)
         ed += len(ocemotion_cur)
@@ -118,9 +124,11 @@ class Data_generator():
         st += len(ocemotion_cur)
         ed += len(tnews_cur)
         tnews_tensor = torch.tensor([i for i in range(st, ed)]).to(self.device)
+        
         input_ids = torch.cat(input_ids, axis=0).to(self.device)
         token_type_ids = torch.cat(token_type_ids, axis=0).to(self.device)
         attention_mask = torch.cat(attention_mask, axis=0).to(self.device)
+
         res = dict()
         res['input_ids'] = input_ids
         res['token_type_ids'] = token_type_ids

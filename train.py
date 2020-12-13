@@ -1,14 +1,15 @@
 import torch
 from transformers import BertModel, BertTokenizer
 import json
+import time
 from utils import get_f1, print_result
 from net import Net
 from data_generator import Data_generator
 from calculate_loss import Criterion
 
 
-def train(epochs=20, batchSize=64, lr=0.0001, device, accumulate=True, a_step=16, use_dtp=False,
-        tokenizer_model='bert-base-chinese', pretrained_model='./pretrain_model', load_saved=False, finetuning_model='./saved_best.pt',
+def train(epochs=20, print_freq=100, batchSize=64, lr=0.0001, device='cuda', accumulate=True, a_step=16, use_dtp=False,
+        tokenizer_model='bert-base-chinese', pretrained_model='./pretrain_model', load_saved=False, finetuning_model='./models/saved_best.pt',
         weighted_loss=False):
     
     print('-------------------- prepare training --------------------')
@@ -20,7 +21,7 @@ def train(epochs=20, batchSize=64, lr=0.0001, device, accumulate=True, a_step=16
         model = torch.load(finetuning_model)
         print('loading finetunning model...')
     else:
-        Net(BertModel.from_pretrained(pretrained_model))
+        model = Net(BertModel.from_pretrained(pretrained_model))
         print('loading pretrained model...')
     # 模型转换
     model.to(device, non_blocking=True) # 非阻塞提高速度
@@ -172,7 +173,8 @@ def train(epochs=20, batchSize=64, lr=0.0001, device, accumulate=True, a_step=16
             train_tnews_gold_list += g
             cnt_train += 1
 
-            if (cnt_train + 1) % 1 == 0:
+            torch.cuda.empty_cache()
+            if (cnt_train + 1) % print_freq == 0:
                 print('Batch [{}]: accuracy: {}, loss: {}'.format(cnt_train+1, train_correct / train_total, train_loss / cnt_train))
         
         if accumulate:
@@ -184,7 +186,11 @@ def train(epochs=20, batchSize=64, lr=0.0001, device, accumulate=True, a_step=16
         train_tnews_f1 = get_f1(train_tnews_gold_list, train_tnews_pred_list)
         train_avg_f1 = (train_ocnli_f1 + train_ocemotion_f1 + train_tnews_f1) / 3
 
+        print('---------------- training info --------------------')
         print('Epoch [{}/{}]: train average f1: {}'.format(epoch, epochs, train_avg_f1))
+        print('ocnli average f1:', train_ocnli_f1)
+        print('ocemotion average f1:', train_ocemotion_f1)
+        print('tnews average f1:', train_tnews_f1)
 
         # print(epoch, 'the epoch train average f1 is:', train_avg_f1)
         # print(epoch, 'the epoch train ocnli is below:')
@@ -262,6 +268,8 @@ def train(epochs=20, batchSize=64, lr=0.0001, device, accumulate=True, a_step=16
                 dev_tnews_pred_list += p
                 dev_tnews_gold_list += g
                 cnt_dev += 1
+
+                torch.cuda.empty_cache()
                 #if (cnt_dev + 1) % 1000 == 0:
                 #    print('[', cnt_dev + 1, '- th batch : dev acc is:', dev_correct / dev_total, '; dev loss is:', dev_loss / cnt_dev, ']')
             dev_ocnli_f1 = get_f1(dev_ocnli_gold_list, dev_ocnli_pred_list)
@@ -271,6 +279,10 @@ def train(epochs=20, batchSize=64, lr=0.0001, device, accumulate=True, a_step=16
 
 
             print('Epoch [{}/{}]: dev average f1: {}'.format(epoch, epochs, dev_avg_f1))
+            print('ocnli average f1:', dev_ocnli_f1)
+            print('ocemotion average f1:', dev_ocemotion_f1)
+            print('tnews average f1:', dev_tnews_f1)
+            print('---------------------------------------------------')
 
             # print(epoch, 'th epoch dev average f1 is:', dev_avg_f1)
             # print(epoch, 'th epoch dev ocnli is below:')
@@ -282,6 +294,16 @@ def train(epochs=20, batchSize=64, lr=0.0001, device, accumulate=True, a_step=16
 
             dev_data_generator.reset()
             
+            # record score to text
+            with open('score_record.txt', 'a+') as f:
+                line0 = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()) + '\n'
+                line1 = 'Epoch ' + str(epoch) + '\n'
+                line2 = 'train set f1: ' + str(train_avg_f1) + '\n'
+                line3 = 'ocnli: ' + str(train_ocnli_f1) + ' ocemotion: ' + str(train_ocemotion_f1) + ' tnews: ' + str(train_tnews_f1) + '\n'
+                line4 = 'dev set f1:' + str(dev_avg_f1) + '\n'
+                line5 = 'ocnli: ' + str(dev_ocnli_f1) + ' ocemotion: ' + str(dev_ocemotion_f1) +  ' tnews: ' + str(dev_tnews_f1) + '\n\n'
+                f.write(line0 + line1 + line2 + line3 + line4 + line5)
+
             if dev_avg_f1 > best_dev_f1:
                 best_dev_f1 = dev_avg_f1
                 best_epoch = epoch
